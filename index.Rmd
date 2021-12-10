@@ -1,0 +1,754 @@
+---
+title: "Missing Migrants: Uncovering Trends in Migration Routes"
+author: "Rebecca Astatke, Samantha Tracy, Marissa Chan, Sanjana Bhaskar"
+date: "11/27/2021"
+output: rmdformats::downcute
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r,message=FALSE, warning=FALSE, echo=FALSE}
+# Load libraries
+library(tidyverse)
+library(lubridate)
+library(zoo)
+library(maps)
+library(splitstackshape)
+library(caret)
+library(e1071)
+library(pROC)
+
+library(lubridate)
+library(plotly)
+library(leaflet)
+library(widgetframe)
+library(htmlwidgets)
+library(devtools)
+library(cli)
+devtools::install_github("gadenbuie/ggpomological")
+library(ggplot2)
+library(dplyr)
+library(ggpomological)
+library(htmltools)
+library(ggridges)
+library(tm)
+library(knitr)
+library(table1)
+library(gridGraphics)
+library(gridExtra)
+library(wordcloud)
+library(ggpubr)
+library(gridGraphics)
+library(gridExtra)
+library(tidytext)
+library(rvest)
+library(gmodels)
+library(janitor)
+library(rpart)
+library(rpart.plot)
+library(vembedr)
+
+
+# Upload Missing Migrants Dataset
+
+data <-read.csv("MMdf.csv")
+
+# Setting data up
+
+# create new columns for both lat and long
+data <- data %>% separate(coordinates, into = c("lat" , "lng"), sep = ",")
+
+#making variables numeric instead of character variables
+data <- transform(data, lat = as.numeric(lat), 
+               lng = as.numeric(lng))
+## creating categories that are continents
+# combining areas that fall under a larger region
+data <- data %>% mutate(continent =case_when(region %in% c("Horn of Africa", "North Africa", "Sub-Saharan Africa") ~ "Africa",
+                            region %in% c("Mediterranean") ~ "Mediterranean",
+                            region == "Middle East" ~ "Middle East",
+                            region %in% c("North America", "Caribbean","US-Mexico Border", "Central America") ~ "North America",
+                            region %in% c("East Asia", "Central Asia","South Asia", "Southeast Asia") ~ "Asia",
+                            region == "Europe" ~ "Europe",
+                            region == "South America" ~ "South America",
+                            TRUE~"Other"))
+
+# dead and missing variable
+data <- data %>%
+  mutate(tot_missing_dead= gsub( ',', '', data$tot_missing_dead))%>%
+  mutate(n_dead_and_missing = as.numeric(tot_missing_dead))
+
+data <- subset(data, !(data$lat=="NA"))
+
+mm <- data %>% rename(deaths = count_dead,
+                       disappearances = min_missing) %>%
+  pivot_longer(cols = c(deaths:disappearances),
+               names_to = "dead.missing", 
+               values_to = "number.dead.missing")
+
+```
+
+# Access to Data, Project Files, and Github Repository 
+Use this link to create a local directory to our github repository named BST260-Final-Team8: https://github.com/marissachan/BST260-Final-Team8.git
+
+# Overview and Motivation 
+According to the United Nations, a person is forced to leave home every two seconds. In 2020, 3.5% of the world’s population were international migrants [IOM 2020](https://www.un.org/sites/un2.un.org/files/wmr_2020.pdf).
+
+Due to ongoing conflicts, violence, and climate change, the number of individuals migrating to other countries has grown substantially in recent years. Major displacement and migration events that have driven this increase including economic and political instability in Venezuela, climate hazards in the Philippines and China, and violence in Bangladesh [IOM 2020](https://www.un.org/sites/un2.un.org/files/wmr_2020.pdf). Unfortunately, there are numerous other events that drive the number of migrants and the patterns of migration that we are now witnessing. These complex and changing migration patterns make it difficult to track migration routes and the tragedies that occur on the journeys to their destination countries. 
+
+The migration crisis demands public policy to improve asylum processes and humanitarian setting relief to address the root causes and impacts of migration (e.g. climate change, conflict, violence, etc.) using a Human Rights framework [OHCHR](https://www.ohchr.org/EN/Issues/Migration/Pages/HumanRightsFramework.aspx).
+
+![BBC 2021](https://ichef.bbci.co.uk/news/1024/cpsprodpb/FB2F/production/_121830346_gettyimages-1236771909.jpg)
+
+::: {.fullwidth}
+# Project Objectives (Initial Questions)
+Our main objective was to analyze the main causes of deaths for migrants, spatially and temporally. We were specifically interested in answering the questions:
+(1)	What is the spatial distribution of migrant deaths (more specifically, causes of death)? How does it differ by year? (Mapping)
+(2)	What are the most frequent causes of death among migrants? How does it differ by year? (Text Analysis)
+(3) What model is appropriate for examining predicted migrant deaths from violence? (Machine Learning)
+(4) What are the migration routes that result in violence as the most frequent cause of death? (Decision Tree)
+:::
+
+::: {.fullwidth}
+# Screencast
+Click [here](https://vimeo.com/655485284) for the screencast overview of project
+:::
+
+::: {.fullwidth}
+# Source and Methodology
+The Missing Migrants Project data is used to inform target 10.7.3 of the 2030 Agenda for Sustainable Development, the "number of people who died or disappeared in the process of migration towards an international destination” calling on all the world’s governments to address what the International Organization for Migration (IOM) describes as “an epidemic of crime and abuse." [Missing Migrants Project 2020](https://missingmigrants.iom.int/). Using a total of 1948 information sources across the globe, IOM's Missing Migrants Project tracks deaths and disappearances of migrants, including refugees and asylum-seekers, who have gone missing along mixed migration routes worldwide. More specifically, the project focuses on migrants who have died at external borders of states or in the process of migration towards an international destination regardless of legal status, excluding internally displaced persons, one of the largest proportion of migrants.
+
+We conducted a variety of exploratory and main analyses (mapping, text analysis, machine learning, and decision tree) to answer our questions listed above and to elucidate the experiences and tragedies of migrants across the world. This project aims to contribute to research examining the patterns of migration in efforts to protect migrant health and safety.
+
+[Missing Migrant Project Dataset](https://missingmigrants.iom.int/downloads)
+:::
+
+::: {.fullwidth}
+# Related Work
+While there has been an increase in research from academia and international organizations on migration issues, the majority has been from “destination countries” [IOM 2020](https://www.un.org/sites/un2.un.org/files/wmr_2020.pdf). Additional research is needed to not only to examine the patterns and routes of migration, but also to develop policies and interventions. 
+
+We were inspired by previous work [The Unwelcomed Story](https://www.alhadaqa.com/wp-content/uploads/2019/09/the_unwelcomed_story.html), which not only does a beautiful job of visually displaying the data, but also shed light on this important issue.
+:::
+
+![Atlantic 2015](https://cdn.theatlantic.com/thumbor/2-_th9FcFkcVAb1TwpYmhQkOAis=/1200x667/media/img/photo/2015/10/thousands-of-migrants-are-crossing/b02_AP496976768785/original.jpg)
+
+# Exploratory Analysis
+# Waves of Migration
+
+::: {.fullwidth}
+Here, we see that 2016 had the highest number of deaths and disappearances due to global migration.
+:::
+```{r,message=FALSE, warning=FALSE,echo=FALSE, fig.height=8, fig.width=7}
+#graph
+
+barp1 <- mm %>%
+  ggplot(aes(year,n_dead_and_missing))+
+  geom_bar(aes(fill=year),stat="identity", width =2)+
+  xlab('Year') + 
+  ylab('Number Dead and Missing')+
+  labs(title="Waves of migration",
+       subtitle="Deaths and disappearances in global migration from 2014 to 2021")+
+  theme_pomological_fancy("Homemade Apple", 16)+
+  theme(legend.position = "none")+
+  scale_color_manual(values=c('#999999','#E69F00', '#56B4E9','#88CCEE', '#CC6677','#DDCC77'))
+
+barp1_fin <- paint_pomological(barp1)
+barp1_fin
+```
+
+
+# From Waves to a Constant Flow of Migration
+## Changes in patterns of migration over time 
+::: {.fullwidth}
+From 2014 to 2020, earlier events were less frequent with higher numbers of deaths and disappearances while later incidents were more frequent but with less deaths and disappearances. This may be due to the drastic increase of forced displacement from a limited number of countries ; this surge was concentrated between 2012 to 2017 with 67% of refugees coming from 5 countries: the Syrian Arab Republic (6.7 mil),  Afghanistan (2.7 mil), South Sudan (2.3 mil) , Myanmar (1.1 mil) , and Somalia (0.9 mil) [UNHCR](https://www.unhcr.org/statistics/unhcrstats/5d08d7ee7/unhcr-global-trends-2018.html). While in 2019, the conflict, violence and disasters triggered 33.4 million new internal displacements across 145 countries. Thus, the trends in global migration at large seem to echo the conflicts over time.
+
+Here, we see that after 2016, the migration trends change with years 2014 through 2016 having very similar trend of large fluctuations with much larger scale incidents of deaths and disappearances while 2018 through 2020 having very similar trend of more consistent and constant migration.
+:::
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE, fig.height=8, fig.width=7}
+plot2 <- ggplot(mm,aes(x=month, y=number.dead.missing, fill = dead.missing, density = dead.missing))+
+  geom_bar(position = "dodge", stat = "identity")+
+  ggtitle('Frequency of Migration \n Incidents Over Time')+
+  ylab('Number dead and missing')+
+  facet_wrap(.~year,2)+
+  theme(legend.position="bottom")+
+  scale_x_discrete(guide = guide_axis(n.dodge=3))+
+  scale_y_discrete(guide = guide_axis(n.dodge=3))+
+  scale_color_pomological()+
+  scale_fill_manual(values=c("#88CCEE", "#2b232f")) +
+  scale_alpha_manual(values=c(1,0.1)) +
+  theme_pomological("Homemade Apple", 16)+
+  theme(legend.position="bottom") +
+  theme(legend.title=element_blank())+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+paint_pomological(plot2)
+```
+
+
+# Understanding causes of death in migration incidents over time
+::: {.fullwidth}
+Using this interactive graph, we can examine the cause of death and number dead by incident by region.
+:::
+```{r,message=FALSE, warning=FALSE, echo=FALSE}
+fig <- mm %>% filter(n_dead_and_missing > 5) %>%
+  plot_ly(
+    x = ~event_date, 
+    y = ~n_dead_and_missing, 
+    size = ~n_dead_and_missing, 
+    color = ~region,
+    text = ~cause_death,
+    hoverinfo = "text",
+    hovertemplate = paste(
+      "<b>%{text}</b><br><br>",
+      "%{yaxis.title.text}: %{y:.0}<br>",
+      "<extra></extra>"),
+    type = 'scatter',
+    jitter = 0.7,
+    mode = 'markers'
+  )
+
+
+fig<- fig %>% layout(title = 'Causes of Deaths and Dissappearances \n in Global Migration Over Time By Region',
+                      caption = 'International Organization for Migration Missing Migrants Project',
+                      xaxis = list(title= 'Date', showticklabels = FALSE,showgrid = F),
+                      yaxis = list(title ="Total number dead and missing",showgrid = F))
+fig
+
+```
+
+# Looking at migration incidents by continent 
+::: {.fullwidth}
+This allows us to see where the most incidents occur across continents. We have to still consider that we do not know where the migrants start point was. 
+:::
+```{r, message=FALSE, warning=FALSE,echo=FALSE, fig.height=8, fig.width=7}
+plot_a <- data %>%ggplot(aes(event_date,count_dead, color= continent, fill = continent))+
+  geom_point((aes(group = seq_along(event_date))),
+        shape=22,
+        alpha=0.7,
+        size=2,
+        stroke = 1)+
+  scale_color_pomological()+
+  scale_fill_pomological()+
+  xlab('Date') + 
+  ylab('Number Dead (log10 transformed)')+
+  ggtitle('Deaths by continent in global migration')+
+   theme_pomological("Homemade Apple", 16)+
+  theme(legend.position="bottom")+
+  theme(legend.title=element_blank())+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+  scale_y_continuous(trans='log10')+
+  facet_wrap(~continent)
+paint_pomological(plot_a)
+```
+
+# Main analyses (1-4) 
+
+# (1) Examining Causes of Deaths by Region
+
+::: {.fullwidth}
+Using the interactive map below, we can examine the causes of death and number of incidents reported by region. The number of incidents increased every year until 2019, and then decreased in 2020 and 2021. The user can interact with the map by choosing the year of interest using the toggle on the right and clicking on the circle markers to zoom into the causes of death reported for each location of incident.
+
+To view the map on a separate window, please click [here](https://sanjana-bhaskar.github.io/Interactive-Map-Bst-260-project/) 
+:::
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+
+dat_2021 <- read.csv("2021.csv")
+dat_2020 <- read.csv("2020.csv")
+dat_2019 <- read.csv("2019.csv")
+dat_2018 <- read.csv("2018.csv")
+dat_2017 <- read.csv("2017.csv")
+dat_2016 <- read.csv("2016.csv")
+dat_2015 <- read.csv("2015.csv")
+dat_2014 <- read.csv("2014.csv")
+dat <- rbind(dat_2021, dat_2020,
+             dat_2019, dat_2018,
+             dat_2017, dat_2016,
+             dat_2015, dat_2014)
+
+dat <- separate(data = dat, col = Coordinates, into = c("lat", "long"), sep = ",")
+
+dat <- dat %>% mutate( lat = as.numeric(lat),
+                       long = as.numeric(long))
+
+dat <- subset(dat, !(dat$lat=="NA"))
+
+
+tag.map.title <- tags$style(HTML("
+  .leaflet-control.map-title { 
+    transform: translate(-50%,20%);
+    position: fixed !important;
+    left: 50%;
+    text-align: center;
+    padding-left: 10px; 
+    padding-right: 10px; 
+    background: rgba(255,255,255,0.75);
+    font-weight: bold;
+    font-size: 18px;
+  }
+"))
+
+title <- tags$div(
+  tag.map.title, HTML("Missing Migrants Project - Cause of Death by Region (2014:2021)")
+)
+
+map <- leaflet() %>% 
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(data = subset(dat, dat$Year=="2021"),
+                   group = "2021",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "cadetblue", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>%
+  addCircleMarkers(data = subset(dat, dat$Year=="2020"),
+                   group = "2020",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "forestgreen", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2019"),
+                   group = "2019",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "chocolate", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2018"),
+                   group = "2018",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "darkred", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2017"),
+                   group = "2017",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "darkgoldenrod", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2016"),
+                   group = "2016",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "darkviolet", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2015"),
+                   group = "2015",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "darkseagreen", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>% 
+  addCircleMarkers(data = subset(dat, dat$Year=="2014"),
+                   group = "2014",
+                   color = "antiquewhite",
+                   lat = ~lat, lng = ~long,
+                   popup = ~Cause.of.Death,
+                   fillColor = "indianred", 
+                   fillOpacity = 0.7, 
+                   clusterOptions = markerClusterOptions(showCoverageOnHover = FALSE)) %>%
+  addLayersControl( baseGroups = c("2021", "2020",
+                                   "2019", "2018", 
+                                   "2017", "2016",
+                                   "2015", "2014"),
+    options = layersControlOptions(collapsed = FALSE),
+    position = "topright") %>% 
+  htmlwidgets::onRender("
+      function(el, x) {
+         var updateLegend = function () {
+            var selectedGroup = document.querySelectorAll('input:checked')[0].nextSibling.innerText.substr(1);
+            var selectedClass = selectedGroup.replace(' ', '');
+            document.querySelectorAll('.legend').forEach(a => a.hidden=true);
+            document.querySelectorAll('.legend').forEach(l => {
+               if (l.classList.contains(selectedClass)) l.hidden=false;
+            });
+         };
+         updateLegend();
+         this.on('baselayerchange', el => updateLegend());
+      }"
+  ) %>% 
+  htmlwidgets::onRender("
+        function() {
+            $('.leaflet-control-layers-list').prepend('Year');
+        }") %>% 
+  addControl(title, position = "topleft", className="map-title")
+
+map
+
+```
+
+# (2) Examining Causes of Death using Text Analysis
+::: {.fullwidth}
+The table  below presents the 22 main words identified from the causes of deaths reported from 2014-2021. The words with the highest frequency were "unknown", "mixed", and "drowning". Additionally, "lack" and "adequate" were mentioned frequently. The words that had the lowest frequency were "accidental", "access", "healthcare", and "sickness". 
+
+One significant limitation of this analysis is the standardized causes of death reported in the Missing Migrants dataset (Note: most of this dataset's string variables are standardized). In other words, there are only a set number of causes of death reported, which means that the most frequently reported words will be related. For example: "mixed" and "unknown" are both a part of the cause of death listed "Mixed or Unknown". While this does limit our abilities to draw in-depth conclusions, we are still able to identify the main causes of death reported from 2014-2021. 
+
+While standardizing the causes of death does make it easier for researchers, governments, and other entities examining this issue, we could potentially be losing some information regarding the specifics to the causes of death. Potentially future versions of the dataset will include not only the current causes of death variable, but also an additional string variable with more information regarding the specific causes of death that may be more conducive to text analyses.
+
+:::
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+# Selecting key rows and making cause of death words separate for text analysis
+tidy_data <- data %>%
+    select(year, loc_death, cause_death, event_date,info_source) %>%
+    unnest_tokens("word", cause_death)
+
+# Remove filler words 
+df_corpus <- Corpus(VectorSource(as.vector(tidy_data$word))) 
+df_corpus <- tm_map(df_corpus, removeWords, stopwords("english"))
+data("stop_words")
+tidy_data<-tidy_data %>%anti_join(stop_words)
+
+# Table of all main words identified in causes of death 
+bt <- tidy_data
+label(bt$word) <- "Main Words Identified from Causes of Death"
+table1(~word, data = bt)
+```
+
+::: {.fullwidth}
+
+We also wanted to visually present the main words identified. So, we created a word cloud to present the main words from causes of death (specifically words that were listed a minimum of 1300 times to demonstrate those listed the most frequently). This word cloud supported our previous findings that the main causes of death were mixed or unknown and drowning.
+:::
+```{r,  message=FALSE, warning=FALSE,echo=FALSE}
+# Create Word cloud 
+text<- tidy_data$word
+docs <- Corpus(VectorSource(text))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+df <- data.frame(word = names(words),freq=words)
+
+# Word cloud of most frequent: Mentioned more than 1300 times
+wordcloud(words = df$word, freq = df$freq, min.freq = 1300, rot.per=0,
+          random.order=FALSE, colors=brewer.pal(8, "Greys"), family = "script", font = 2)
+```
+
+::: {.fullwidth}
+Lastly, we created a bar plot of the top 10 most frequently reported words, illustrating the main causes of death. Again, "mixed" and "unknown" and "drowning" were the most frequent.
+:::
+```{r,  message=FALSE, warning=FALSE, echo=FALSE}
+# Select top 10 most frequent words
+df <- df[c(1:10),]
+
+# Bar plot of the frequency for the top 10
+df %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+ theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+  xlab("Top 10 Most Frequent Words")+
+  ylab("Frequency")+
+  ggtitle("Top 10 Most Frequent Words Identified from Causes of Death")
+```
+
+::: {.fullwidth}
+As a secondary text analysis, we examined the main words identified from the causes of death to see if there were differences across years. In 2014, 2016-2019 the main words identified (representing the main causes of death among migrants that year) were "mixed" and "unknown". One of the other most frequent words in those years were "drowning". In 2015, 2020-2021, the main word identified from causes of death was "drowning". Our finding of "mixed" and "unknown" being the most frequent words, demonstrates that causes of death among migrants are multifactorial and most likely difficult to document due to the circumstances of their deaths and disappearances. Additionally, it means that we are somewhat limited in terms of identifying interventions based on causes of deaths from this current analysis.
+
+Comparatively, the second most frequent word identified (representing the second most frequent cause of death across years) and the most frequent since 2020 is drowning. This demonstrates that certain migration routes across water are more deadly compared to other routes. This finding is supported by ongoing news stories  tragedies involving drownings (one of the most recent in November 2021 [Noack et al.](https://www.washingtonpost.com/world/europe/migrants-dead-english-channel/2021/11/24/9fce5a72-4d43-11ec-a7b8-9ed28bf23929_story.html), as well as speaks to the rationale for the development of the Missing Migrants Project when two shipwrecks occurred near the Italian island of Lampedusa and more than 368 individuals lost their lives. 
+:::
+
+```{r,  message=FALSE, warning=FALSE, echo=FALSE, fig.height=5, fig.width=4}
+# Secondary Text Analysis: Cause of Death by Year
+
+#Cause of death 2021
+tidy21 <- tidy_data %>% filter(year=="2021") 
+text21<- tidy21$word
+docs21 <- Corpus(VectorSource(text21))
+dtm21 <- TermDocumentMatrix(docs21) 
+matrix21 <- as.matrix(dtm21) 
+words21 <- sort(rowSums(matrix21),decreasing=TRUE) 
+df21 <- data.frame(word = names(words21),freq=words21)
+
+# Select top 10 and bar plot
+df21a <- df21[c(1:10),]
+cod21 <-df21a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+ 
+  coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2020
+tidy20 <- tidy_data %>% filter(year=="2020") 
+text20<- tidy20$word
+docs20 <- Corpus(VectorSource(text20))
+dtm20 <- TermDocumentMatrix(docs20) 
+matrix20 <- as.matrix(dtm20) 
+words20 <- sort(rowSums(matrix20),decreasing=TRUE) 
+df20 <- data.frame(word = names(words20),freq=words20)
+
+# Select top 10 and bar plot
+df20a <- df20[c(1:10),]
+cod20 <-df20a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+ 
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+  
+#Cause of death 2019
+tidy19 <- tidy_data %>% filter(year=="2019") 
+text19<- tidy19$word
+docs19 <- Corpus(VectorSource(text19))
+dtm19 <- TermDocumentMatrix(docs19) 
+matrix19 <- as.matrix(dtm19) 
+words19 <- sort(rowSums(matrix19),decreasing=TRUE) 
+df19 <- data.frame(word = names(words19),freq=words19)
+
+# Select top 10 and bar plot
+df19a <- df19[c(1:10),]
+cod19 <-df19a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2018
+tidy18 <- tidy_data %>% filter(year=="2018") 
+text18<- tidy18$word
+docs18 <- Corpus(VectorSource(text18))
+dtm18 <- TermDocumentMatrix(docs18) 
+matrix18 <- as.matrix(dtm18) 
+words18 <- sort(rowSums(matrix18),decreasing=TRUE) 
+df18 <- data.frame(word = names(words18),freq=words18)
+
+# Select top 10 and bar plot
+df18a <- df18[c(1:10),]
+cod18 <- df18a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+ 
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2017
+tidy17 <- tidy_data %>% filter(year=="2017") 
+text17<- tidy17$word
+docs17 <- Corpus(VectorSource(text17))
+dtm17 <- TermDocumentMatrix(docs17) 
+matrix17 <- as.matrix(dtm17) 
+words17 <- sort(rowSums(matrix17),decreasing=TRUE) 
+df17 <- data.frame(word = names(words17),freq=words17)
+
+# Select top 10 and bar plot
+df17a <- df17[c(1:10),]
+cod17 <-df17a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2016
+tidy16 <- tidy_data %>% filter(year=="2016") 
+text16<- tidy16$word
+docs16 <- Corpus(VectorSource(text16))
+dtm16 <- TermDocumentMatrix(docs16) 
+matrix16 <- as.matrix(dtm16) 
+words16 <- sort(rowSums(matrix16),decreasing=TRUE) 
+df16 <- data.frame(word = names(words16),freq=words16)
+
+# Select top 10 and bar plot
+df16a <- df16[c(1:10),]
+cod16 <-df16a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2015
+tidy15 <- tidy_data %>% filter(year=="2015") 
+text15<- tidy15$word
+docs15 <- Corpus(VectorSource(text15))
+dtm15 <- TermDocumentMatrix(docs15) 
+matrix15 <- as.matrix(dtm15) 
+words15 <- sort(rowSums(matrix15),decreasing=TRUE) 
+df15 <- data.frame(word = names(words15),freq=words15)
+
+# Select top 10 and bar plot
+df15a <- df15[c(1:10),]
+cod15<- df15a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+#Cause of death 2014
+tidy14 <- tidy_data %>% filter(year=="2014") 
+text14<- tidy14$word
+docs14 <- Corpus(VectorSource(text14))
+dtm14 <- TermDocumentMatrix(docs14) 
+matrix14 <- as.matrix(dtm14) 
+words14 <- sort(rowSums(matrix14),decreasing=TRUE) 
+df14 <- data.frame(word = names(words14),freq=words14)
+
+# Select top 10 and bar plot
+df14a <- df14[c(1:10),]
+cod14 <- df14a %>% ggplot(aes(word, freq))+
+         geom_bar(stat="identity")+
+  theme_pomological("Homemade Apple", 16)+ 
+  theme(axis.text.x = element_text(angle =90), legend.position = "none")+
+   coord_cartesian(ylim = c(0, 600))
+
+```
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#Pull together plots 2014-2021
+figure <- ggarrange(cod14+rremove("xlab")+rremove("ylab")+ggtitle("2014"),
+          cod15+rremove("xlab")+rremove("ylab")+ggtitle("2015"), 
+          cod16+rremove("xlab")+ggtitle("2016")+rremove("ylab"), 
+          cod17+rremove("xlab")+ggtitle("2017")+rremove("ylab"), 
+          cod18+rremove("xlab")+ggtitle("2018")+rremove("ylab"), 
+          cod19+rremove("xlab")+ggtitle("2019")+rremove("ylab"), 
+          cod20+rremove("xlab")+ggtitle("2020")+rremove("ylab"), 
+          cod21+rremove("xlab")+rremove("ylab")+ggtitle("2021"), labels=NULL, ncol=4, nrow=2, common.legend = TRUE, legend = "bottom")
+
+annotate_figure(figure, top = text_grob("Top 10 Most Frequent Words Identified from Causes of Death 2014-2021", face = "bold", size = 14), left = text_grob("Count of Main Words", rot = 90, vjust = 1))
+```
+
+To further explore the causes of death, we conducted additional analyses regarding the cause of death of violence.
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+#Recode Violence
+#First death due to violence was recoded into a binomial variable with 0 = death due to cause other than violence and 1= death due to violence 
+
+mm<- mm %>% mutate(violence=ifelse(cause_death=="Violence", "1","0")) %>% mutate (violence= as.numeric(violence))
+```
+
+
+# (3) Violence by Region: Machine Learning 
+
+Create Region Category
+
+A regional category was created to allow for analysis in the machine learning algorithms. The values for each of the regional categories is shown below.
+
+1 = Caribbean
+2 = Central America
+3 = Central Asia
+4 = Eastern Africa
+5 = Eastern Asia
+6 = Europe
+7 = Mediterranean
+8 = Middle Africa
+9 = North America
+10 = Northern Africa
+11 = South America
+12 = South-eastern Asia
+13 = Southern Africa
+14 = Southern Asia
+15 = Western Africa
+16 = Western Asia
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+mm <- mm %>% mutate(region_category = as.numeric(as.factor(region)))
+
+```
+
+```{r, message=FALSE, warning=FALSE,echo=FALSE}
+#Training & Test Sets
+set.seed(1)
+
+x <- stratified(mm, "violence", 0.7, keep.rownames = TRUE)
+train_set <- x %>% dplyr::select(-rn)
+train_index <- as.numeric(x$rn)
+test_set <- mm[-train_index,]
+
+dim(train_set)
+dim(test_set)
+```
+
+::: {.fullwidth}
+Based on the confusion matrices all of the models have high accuracies of 0.90 with very high specificity and very low sensitivity. This is likely due to class imbalance with relatively few cases of death due to violence in comparison to the overall large data set. The summary statistics for the logistic regression model show that only region_category is a significant predictor of death due to violence, the month appears to have no significant impact on violence as an outcomes, this is interesting as it shows that month of migration does not appear to impact the likelihood of dying from violence, but this metric is determined solely based on region.
+
+The high accuracies of the models stem from the class imbalance and occur since by assuming all machine learning outcomes result in an outcome of 0 (death due to a cause other than violence) the algorithm is correct nearly 90% of the time, hence the high specificity values. 
+:::
+
+```{r,  message=FALSE, warning=FALSE, echo=FALSE}
+## Logistic regression
+set.seed(1)
+glm_violence <-  glm(violence ~ region_category + month, data=train_set, family="binomial")
+summary(glm_violence)
+p_hat <- predict(glm_violence, newdata = test_set, type="response")
+y_hat <- ifelse(p_hat > 0.5, 1, 0)
+confusionMatrix(data = as.factor(y_hat), reference = as.factor(test_set$violence), positive = "1")
+
+## Naive Bayes
+set.seed(1)
+nb_fit   <- naiveBayes(violence ~ region_category + month, data = train_set)
+p_hat_nb <- predict(nb_fit, test_set, type = "raw")[,2]
+y_hat_nb <- ifelse(p_hat_nb > 0.5, 1, 0)
+confusionMatrix(data = as.factor(y_hat_nb), reference = as.factor(test_set$violence), positive = "1")
+
+## kNN
+set.seed(1)
+knn_fit <- knn3(violence~.,data = select(train_set, violence, region_category, month), k=10)
+f_hat <- predict(knn_fit, newdata = test_set)[,2]
+tab <- table(pred=round(f_hat), truth=test_set$violence)
+confusionMatrix(tab,positive = "1")
+```
+
+```{r,  message=FALSE, warning=FALSE, echo=FALSE}
+#ROC Curves
+roc_logistic <- roc(test_set$violence, p_hat)
+roc_nb <- roc(as.factor(test_set$violence), p_hat_nb)
+roc_knn <- roc(test_set$violence, f_hat)
+
+ggroc(list("Logistic" = roc_logistic, "NB" = roc_nb, "KNN: k=10"=roc_knn)) +
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color = "black", linetype = "dashed") +
+   theme_pomological("Homemade Apple", 16)+
+  ggtitle("ROC Curves for Logistic , Naive Bayes, \n and K-nearest Neighbors Models ") +
+  xlab("Sensitivity") +
+  ylab("Specificity") +
+  labs(colour="")
+
+```
+
+::: {.fullwidth}
+The KNN model has the highest AUC with a value of 0.7461. 
+:::
+```{r,  message=FALSE, warning=FALSE, echo=FALSE}
+#AUC
+auc(roc_logistic)
+auc(roc_nb)
+auc(roc_knn)
+```
+
+::: {.fullwidth}
+# (4) Violence by Region: Decision Tree
+The decision tree takes into account region and month of migration to determine the likelihood of death by violence. The decision tree shows that 45% of deaths by violence occur in region categories below or equal to 6. These 6 regions include Caribbean, Central America, Central Asia, Eastern Africa, Eastern Asia, and Europe.
+
+Overall the decision tree matches what was depicted in the machine learning models, where regional category is the sole predictor of death due to violence and month of migration does not appear to have a significant impacts on the outcome of death via violence.
+:::
+```{r,  message=FALSE, warning=FALSE, echo=FALSE}
+set.seed(1)
+train = sample(1:nrow(mm), nrow(mm)/2)
+fit_rpart = rpart(violence ~ region_category + month, mm, subset = train)
+
+# Print a summary of the tree
+summary(fit_rpart)
+
+# Use tree for prediction
+preds <- predict(fit_rpart, newdata = mm[-train,])
+test = mm[-train, "violence"]
+
+rpart.plot(fit_rpart, digits = 4)
+```
+
+# Implications
+::: {.fullwidth}
+People are forcibly displaced at a rate of 34,000 per day due to conflict or persecution leaving about 10 million people worldwide stateless – having been denied access to basic rights such as safety, health care, labor and freedom of movement [United Nations](https://www.un.org/africarenewal/magazine/december-2016-march-2017/africa-most-affected-refugee-crisis). The IOM’s Missing Migrants Project highlights the complexity of the politics of borders and the need for a focus on a human rights framework. There is a need to identify critical periods, cumulative impact and core pathways that shape migration.
+:::
+
+![OHCHR](https://www.ohchr.org/SiteCollectionImages/Issues/Migration/issue-migration.jpg)
+
+
+
